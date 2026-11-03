@@ -1,0 +1,330 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Prisma Client uses the pooled runtime URL; Prisma CLI migrations use directUrl.
+  url      = env("DATABASE_URL")
+  directUrl = env("DATABASE_MIGRATION_URL")
+}
+
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  name            String
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  role            String    @default("USER")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  refreshTokens   RefreshToken[]
+  authTokens      AuthToken[]
+  bookings        Booking[]
+  idempotencyKeys IdempotencyKey[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  familyId    String    @map("family_id")
+  tokenHash   String    @unique @map("token_hash")
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  replacedBy  String?   @map("replaced_by")
+  ip          String?
+  userAgent   String?   @map("user_agent")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model AuthToken {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  tokenHash  String    @unique @map("token_hash")
+  purpose    String
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+  @@map("auth_tokens")
+}
+
+model Station {
+  code      String  @id
+  name      String
+  city      String
+  lat       Float?
+  lng       Float?
+
+  fromStops TrainStop[] @relation("FromStation")
+
+  @@map("stations")
+}
+
+model Train {
+  number     String    @id
+  name       String
+  type       String
+  isSuperfast Boolean  @default(false) @map("is_superfast")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  stops TrainStop[]
+  seats Seat[]
+  runs  Run[]
+
+  @@map("trains")
+}
+
+model TrainStop {
+  trainNumber  String  @map("train_number")
+  stopIdx      Int     @map("stop_idx")
+  stationCode  String  @map("station_code")
+  arrival      String? // HH:MM format
+  departure    String? // HH:MM format
+  dayOffset    Int     @default(0) @map("day_offset")
+  distanceKm   Float   @default(0) @map("distance_km")
+
+  train   Train   @relation(fields: [trainNumber], references: [number])
+  station Station @relation("FromStation", fields: [stationCode], references: [code])
+
+  @@id([trainNumber, stopIdx])
+  @@index([stationCode])
+  @@map("train_stops")
+}
+
+model Run {
+  id          BigInt    @id @default(autoincrement())
+  trainNumber String    @map("train_number")
+  journeyDate DateTime  @map("journey_date") @db.Date
+  status      String    @default("SCHEDULED")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  train           Train           @relation(fields: [trainNumber], references: [number])
+  bookings        Booking[]
+  waitlistEntries WaitlistEntry[]
+  seatAllocations SeatAllocation[]
+
+  @@unique([trainNumber, journeyDate])
+  @@index([journeyDate])
+  @@map("runs")
+}
+
+model Seat {
+  id          BigInt  @id @default(autoincrement())
+  trainNumber String  @map("train_number")
+  classCode   String  @map("class_code")
+  coach       String
+  seatNo      Int     @map("seat_no")
+  berthType   String  @map("berth_type")
+
+  train           Train            @relation(fields: [trainNumber], references: [number])
+  seatAllocations SeatAllocation[]
+
+  @@unique([trainNumber, coach, seatNo])
+  @@index([trainNumber, classCode])
+  @@map("seats")
+}
+
+model FareRule {
+  classCode          String @id @map("class_code")
+  perKmPaise         Int    @map("per_km_paise")
+  basePaise          Int    @map("base_paise")
+  reservationFeePaise Int   @map("reservation_fee_paise")
+  superfastFeePaise  Int    @map("superfast_fee_paise")
+
+  @@map("fare_rules")
+}
+
+model Booking {
+  id            String    @id @default(uuid()) @db.Uuid
+  pnr           String    @unique
+  userId        String    @map("user_id")
+  runId         BigInt    @map("run_id")
+  fromIdx       Int       @map("from_idx") @db.SmallInt
+  toIdx         Int       @map("to_idx") @db.SmallInt
+  classCode     String    @map("class_code")
+  status        String
+  totalPaise    Int       @map("total_paise")
+  holdExpiresAt DateTime? @map("hold_expires_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  user               User                @relation(fields: [userId], references: [id])
+  run                Run                 @relation(fields: [runId], references: [id])
+  passengers         BookingPassenger[]
+  payments           Payment[]
+  seatAllocations    SeatAllocation[]
+  waitlistEntries    WaitlistEntry[]
+
+  @@index([userId])
+  @@index([runId])
+  @@index([status, holdExpiresAt])
+  @@map("bookings")
+}
+
+model BookingPassenger {
+  id               BigInt  @id @default(autoincrement())
+  bookingId        String  @map("booking_id") @db.Uuid
+  name             String
+  age              Int
+  gender           String
+  seatAllocationId BigInt? @map("seat_allocation_id")
+  status           String  @default("ACTIVE")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  booking        Booking        @relation(fields: [bookingId], references: [id])
+  seatAllocation SeatAllocation? @relation(fields: [seatAllocationId], references: [id])
+
+  @@index([bookingId])
+  @@map("booking_passengers")
+}
+
+// Note: seat_allocations table is created via raw SQL migration to support
+// the exclusion constraint with btree_gist. The Prisma model below syncs
+// the schema for type generation, but the actual DDL comes from migrations.
+model SeatAllocation {
+  id             BigInt    @id @default(autoincrement())
+  runId          BigInt    @map("run_id")
+  seatId         BigInt    @map("seat_id")
+  bookingId      String    @map("booking_id") @db.Uuid
+  fromIdx        Int       @map("from_idx") @db.SmallInt
+  toIdx          Int       @map("to_idx") @db.SmallInt
+  status         String
+  holdExpiresAt  DateTime? @map("hold_expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  run        Run               @relation(fields: [runId], references: [id])
+  seat       Seat              @relation(fields: [seatId], references: [id])
+  booking    Booking           @relation(fields: [bookingId], references: [id])
+  passengers BookingPassenger[]
+
+  @@index([bookingId])
+  @@index([status, holdExpiresAt])
+  @@map("seat_allocations")
+}
+
+model Payment {
+  id                String    @id @default(uuid()) @db.Uuid
+  bookingId         String    @map("booking_id") @db.Uuid
+  gateway           String    @default("razorpay")
+  gatewayOrderId    String    @unique @map("gateway_order_id")
+  gatewayPaymentId  String?   @unique @map("gateway_payment_id")
+  amountPaise       Int       @map("amount_paise")
+  currency          String    @default("INR")
+  status            String
+  failureReason     String?   @map("failure_reason")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  booking Booking  @relation(fields: [bookingId], references: [id])
+  refunds Refund[]
+
+  @@index([bookingId])
+  @@index([status, createdAt])
+  @@map("payments")
+}
+
+model PaymentEvent {
+  id               BigInt    @id @default(autoincrement())
+  gatewayEventId   String    @unique @map("gateway_event_id")
+  type             String
+  payload          Json
+  processedAt      DateTime? @map("processed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@map("payment_events")
+}
+
+model Refund {
+  id               BigInt    @id @default(autoincrement())
+  paymentId        String    @map("payment_id") @db.Uuid
+  amountPaise      Int       @map("amount_paise")
+  status           String
+  gatewayRefundId  String?   @unique @map("gateway_refund_id")
+  reason           String?
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+model IdempotencyKey {
+  key          String    @map("key")
+  userId       String    @map("user_id")
+  endpoint     String
+  requestHash  String    @map("request_hash")
+  status       String    @default("IN_PROGRESS")
+  responseCode Int?      @map("response_code")
+  responseBody Json?     @map("response_body")
+  lockedAt     DateTime  @default(now()) @map("locked_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([userId, key])
+  @@map("idempotency_keys")
+}
+
+model OutboxEvent {
+  id          BigInt    @id @default(autoincrement())
+  type        String
+  aggregateId String    @map("aggregate_id")
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  publishedAt DateTime? @map("published_at")
+
+  @@index([publishedAt])
+  @@map("outbox_events")
+}
+
+model WaitlistEntry {
+  id          BigInt   @id @default(autoincrement())
+  runId       BigInt   @map("run_id")
+  classCode   String   @map("class_code")
+  bookingId   String   @map("booking_id") @db.Uuid
+  positionSeq BigInt   @map("position_seq")
+  status      String   @default("WAITING")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  run     Run     @relation(fields: [runId], references: [id])
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([runId, classCode, status])
+  @@map("waitlist_entries")
+}
+
+model AuditLog {
+  id        BigInt   @id @default(autoincrement())
+  actor     String
+  entity    String
+  entityId  String   @map("entity_id")
+  fromState String?  @map("from_state")
+  toState   String   @map("to_state")
+  reason    String?
+  requestId String?  @map("request_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entity, entityId])
+  @@map("audit_log")
+}

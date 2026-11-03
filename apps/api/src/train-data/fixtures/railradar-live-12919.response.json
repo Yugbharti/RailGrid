@@ -1,0 +1,26 @@
+{
+  "success": true,
+  "data": {
+    "trainNumber": "12919",
+    "startDate": "2026-11-02",
+    "lastUpdatedAt": "2026-11-02T14:01:51+05:30",
+    "status": "running",
+    "isLive": true,
+    "delayMinutes": 4,
+    "currentLocation": {
+      "stationCode": "UJN",
+      "stationName": "Ujjain Jn",
+      "status": "at-station"
+    },
+    "nextHalt": {
+      "stationCode": "MKC",
+      "stationName": "Maksi Jn"
+    }
+  },
+  "meta": {
+    "traceId": "550e8400-e29b-41d4-a716-446655440000",
+    "timestamp": "2026-11-02T14:02:28+05:30",
+    "executionTime": 21,
+    "source": "hybrid"
+  }
+}
