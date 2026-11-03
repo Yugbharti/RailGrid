@@ -26,7 +26,7 @@ Modern high-density railway systems—like Indian Railways (IRCTC)—process **t
 
 Conventional reservation architectures routinely buckle under this pressure:
 1. **Application-level race conditions** cause phantom availability and catastrophic double-bookings.
-2. **Naive seat allocation locks entire train routes**, stranding capacity because a passenger traveling from Station $A \to B$ blocks another passenger wanting the same physical seat from Station $B \to C$.
+2. **Naive seat allocation locks entire train routes**, stranding capacity because a passenger traveling from Station A → B blocks another passenger wanting the same physical seat from Station B → C.
 3. **Flaky payment webhooks, user disconnects, and late payment capture** result in orphaned deductions, lost inventory, or unresolvable financial reconciliation loops.
 4. **Third-party telemetry outages** cascade across the frontend, freezing search and confirmation journeys.
 
@@ -40,10 +40,10 @@ Conventional reservation architectures routinely buckle under this pressure:
 ## 🎯 The Core Problems RailGrid Solves
 
 ### 1. The Overlapping Journey Segment Concurrency Crisis
-A train traveling from **New Delhi (Stop 0) $\to$ Kanpur (Stop 3) $\to$ Lucknow (Stop 5)** has distinct half-open journey segments $[from\_idx, to\_idx)$:
-* **Passenger A** books $[0, 3)$ (Delhi $\to$ Kanpur).
-* **Passenger B** wants $[3, 5)$ (Kanpur $\to$ Lucknow). **Both can share the exact same physical berth!**
-* **Passenger C** wants $[0, 5)$ (Delhi $\to$ Lucknow). This overlaps with both and must be rejected.
+A train traveling from **New Delhi (Stop 0) → Kanpur (Stop 3) → Lucknow (Stop 5)** has distinct half-open journey segments `[from_idx, to_idx)`:
+* **Passenger A** books `[0, 3)` (Delhi → Kanpur).
+* **Passenger B** wants `[3, 5)` (Kanpur → Lucknow). **Both can share the exact same physical berth!**
+* **Passenger C** wants `[0, 5)` (Delhi → Lucknow). This overlaps with both and must be rejected.
 
 Most traditional relational models either lock the seat for the entire journey (destroying seat utilization) or perform read-then-write checks in application code that fail under concurrent transactions.
 
@@ -75,8 +75,20 @@ When users pay via external payment gateways (e.g., Razorpay / Stripe), browsers
 * If a payment arrives *after* the 10-minute hold TTL expires, naive systems overwrite or re-allocate the seat, resulting in two passengers holding the same ticket.
 
 **How RailGrid Solves It:**
-* **Strict State Machines:** Enforces unidirectional transitions:
-  $$\text{CREATED} \longrightarrow \text{SEATS\_HELD} \longrightarrow \text{PAYMENT\_PENDING} \longrightarrow \text{CONFIRMED} \;\big|\; \text{EXPIRED} \;\big|\; \text{CANCELLED}$$
+* **Strict State Machines:** Enforces strictly validated unidirectional transitions:
+  ```
+  Booking:  CREATED ──► SEATS_HELD ──► PAYMENT_PENDING ──► CONFIRMED
+                             │                 │                └──► CANCELLED ──► (Refund Flow)
+                             ├────────►        ├──► FAILED
+                             │  EXPIRED        │
+                             │                 └──► EXPIRED ──► (Late Payment ──► CONFIRMED | REFUND_DUE)
+                             └────────► CANCELLED
+
+  Payment:  CREATED ──► CAPTURED | FAILED
+            CAPTURED ──► REFUND_PENDING ──► REFUNDED | REFUND_FAILED
+
+  Seat:     HELD ──► CONFIRMED | RELEASED | EXPIRED
+  ```
 * **Late-Payment Self-Healing:** If payment arrives after hold expiration, the system attempts to atomically re-acquire the seat; if already claimed by someone else, it automatically flags the payment as `REFUND_DUE` and queues an immediate refund.
 * **Asynchronous Reconciler Worker:** A continuous BullMQ worker probes gateway order states every 2 minutes for any unresolved transaction older than 3 minutes, healing dropped webhooks automatically.
 
@@ -238,7 +250,7 @@ RailGrid departs from generic enterprise UI templates, adopting the **tactile ae
 ```
 
 * **3D Split-Flap Mechanical Boards:** Train numbers, timings, and platforms flip character-by-character using hardware-accelerated 3D CSS transforms (automatically fades for users with `prefers-reduced-motion`).
-* **Journey Ribbon Route Scrubber:** Interactive metro-line representation of the entire train route. Users drag boarding and destination handles across stations, driving segment allocation indices $[from\_idx, to\_idx)$.
+* **Journey Ribbon Route Scrubber:** Interactive metro-line representation of the entire train route. Users drag boarding and destination handles across stations, driving segment allocation indices `[from_idx, to_idx)`.
 * **Segment-Aware Cutaway Coach Maps:** Top-down coach layout (1A, 2A, 3A, SL, CC) displaying live berth occupancy segments. Seats taken downstream but vacant for *your* journey display a distinct reusable berth indicator.
 * **Perforated Ticket Stubs:** Tickets feature scalloped perforated edges, high-contrast typography, and dynamic barcode/QR stamps with one-click offline wallet downloads.
 * **Burning Perforation Hold Timer:** A 10-minute hold countdown timer that visually burns along a ticket perforation, switching to urgent amber/red alert states in the final 60 seconds.
@@ -358,14 +370,14 @@ Run the verification script to verify that overlapping segment bookings are stri
 ```bash
 pnpm --filter @railgrid/db prisma db execute --file prisma/verify-segment-constraint.sql
 ```
-* ✅ Adjacent half-open segments $[0, 3)$ and $[3, 5)$ **succeed** on the same seat.
-* ❌ Overlapping segment $[2, 4)$ on the same seat is **immediately rejected with error `23P01`**.
+* ✅ Adjacent half-open segments `[0, 3)` and `[3, 5)` **succeed** on the same seat.
+* ❌ Overlapping segment `[2, 4)` on the same seat is **immediately rejected with error `23P01`**.
 
 ---
 
 ## 🛡️ Security & Resilience
 
-* **Argon2id Password Storage:** Evaluated with OWASP-recommended parameters ($m=19\text{ MiB}, t=2, p=1$).
+* **Argon2id Password Storage:** Evaluated with OWASP-recommended parameters (`memory=19 MiB`, `iterations=2`, `parallelism=1`).
 * **Refresh Token Rotation:** Employs cryptographically secure token family tracking. Reusing an old refresh token automatically invalidates all active sessions across the entire token family.
 * **Sliding-Window Rate Limiting:** Powered by atomic Redis Lua scripts with IP + email hashing, protecting authentication routes against dictionary attacks.
 * **Strict Idempotency Middleware:** Guarantees that duplicate requests with identical `Idempotency-Key` headers never process twice or trigger duplicate payment authorizations.
