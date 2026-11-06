@@ -148,11 +148,11 @@
 - `pnpm --filter @railgrid/api typecheck` ✅
 - `pnpm --filter @railgrid/api test` ✅ (8 unit tests; Neon integration skipped by default)
 - `RAILGRID_INTEGRATION_TESTS=1 pnpm --filter @railgrid/api test -- src/routes/auth.integration.test.ts` ✅ against Neon: register → verify → login → protected profile → CSRF rejection → refresh rotation → replay revocation → password reset → old/new password checks; temporary user and related rows cleaned up.
-- The same Neon integration run verified the no-Redis fallback admits exactly 3 of 4 concurrent requests, sets rate-limit headers, and ignores spoofed `X-Forwarded-For`.
+- The Neon integration flow verified the no-Redis fallback admitted exactly 3 of 4 concurrent requests and ignored spoofed `X-Forwarded-For`; the latest run also completed with Docker Redis running, exercising the Redis-backed route limiter.
 
 ### Remaining for Phase 2 acceptance
 
-- Redis is not running locally, so the Lua limiter's live Redis behavior and rate-limit load/lockout tests still need a Redis-backed run. The Redis-down fallback and its spoofing behavior are tested.
+- The Redis-backed limiter now runs locally; a sustained brute-force/load run and Turnstile live challenge are still pending.
 - Verification/reset and lockout notifications are durably queued, but email delivery awaits the outbox worker/provider phase.
 - Turnstile's live verification call has not been exercised with an issued challenge token.
 
@@ -184,8 +184,10 @@
 
 - Added a server-only RailRadar live-status adapter for the verified `GET /v1/trains/{number}/live` endpoint. It validates the documented `{ success, data, meta }` envelope and maps provider timestamps to normalized UTC output.
 - Added the fixture adapter and saved the provider's published live-response example as `apps/api/src/train-data/fixtures/railradar-live-12919.response.json`; it is explicitly a docs example, not a captured live response.
+- Added provider methods and documented-shape Zod validation for schedules, trains between stations, and station live boards. Saved the currently published example response shapes under `apps/api/src/train-data/fixtures/`; fixture-based adapter tests consume those files.
 - Added `GET /v1/trains/:number/live` with train-number/date validation, cache-first 60-second freshness, 24-hour last-known-good retention, stale-while-revalidate, Redis token-checked single-flight refresh, 3-second HTTP timeout, bounded GET retries, Retry-After handling, a circuit breaker, and a rolling 30-day shared quota guard that switches to cache-only at 80%.
 - Added Prometheus counters/gauges for provider requests, failures, latency, cache hits, stale responses, quota blocks, and circuit state.
+- Added a home-page live-status card with minute refresh, loading/unavailable states, stale indication, IST update time, and the required third-party demo attribution. It reads only the public RailGrid API URL; the RailRadar key stays on the API server.
 - Kept Neon as the only hosted application database; external train data uses a separate server-only provider credential and does not alter `DATABASE_URL` or `DATABASE_MIGRATION_URL`.
 - Corrected `agent.md` and `.env.example`: RailRadar currently documents 100 requests per billing month and 10/minute on its free Sandbox tier; the old 300/day assumption was stale. The implementation conservatively uses a rolling 30-day budget.
 
@@ -193,18 +195,72 @@
 
 - RailRadar docs reviewed: https://railradar.in/docs, including live-status, authentication, and rate-limit pages ✅
 - A live request to `/v1/trains/12919/live` returned HTTP 401 because no accepted RailRadar key is configured; no key was printed or stored. The authenticated provider path therefore remains unverified.
-- `pnpm --filter @railgrid/api test` ✅ (18 passed; Neon integration test skipped by default). Coverage includes documented response mapping, schema drift rejection, retry metadata, cache reuse, stale fallback, quota thresholds, breaker recovery, fixture route, and metrics.
+- `pnpm --filter @railgrid/api test` ✅ (20 passed; Neon integration test skipped by default). Coverage includes fixture-backed schedule, between-station, station-board and live-status mapping, schema drift rejection, retry metadata, cache reuse, stale fallback, quota thresholds, breaker recovery, fixture route, and metrics.
+- Web lint and typecheck ✅; web production build ✅ after configuring Next.js to transpile the shared workspace package and resolve its NodeNext `.js` import specifiers.
 - `pnpm typecheck` ✅ (5/5 packages)
 - `pnpm lint` ✅ (all packages)
 - `pnpm build` ✅ (API, worker, and Next.js production builds; the sandbox's initial Google Fonts fetch failure was resolved by rerunning with network access).
-- Route checks used Fastify injection with fixture mode; no live Redis instance is available locally, so Lua cache/quota behavior has not been exercised against Redis.
+- Route checks used Fastify injection with fixture mode. Docker Redis is now running and the auth integration exercised Redis successfully; the train-data Lua cache/quota/single-flight path still needs its Redis-backed run.
 
 ### Remaining for Phase 3 acceptance
 
-- Implement and validate the documented schedule, trains-between-stations, and station-board provider methods; static train import and weekly refresh are still deferred.
+- Add the cache, quota, retry, and circuit-breaker wrapper to the schedule/search/board methods; current resilience handling is wired to live status.
+- Add static train import and weekly schedule refresh; the seeded demo schedules remain the booking data source for now.
 - Run the Redis-backed cache/quota/single-flight path with Redis 7.
 - Provide a valid RailRadar API key to capture and validate a successful live response and exercise live status end to end.
-- Connect live-status output to the frontend and show the third-party demo attribution in the relevant status UI.
+
+---
+
+## Phase 4: Booking Engine — PLAN
+
+**Goal**: Add database-authoritative seat holds and idempotent booking creation on top of the seeded Neon inventory.
+
+**Acceptance criteria**: valid booking holds persist; specific and automatic seat selection respect half-open segments; overlapping concurrent requests cannot double-book; fare and hold expiry are computed server-side; idempotent retries replay the original response.
+
+### Steps
+
+1. Add focused tests for fare boundaries, idempotency key reuse/replay, half-open segment selection, and hold expiry.
+2. Implement authenticated `POST /v1/bookings` with transaction-bound validation, deterministic seat locking, stale-hold expiry, database exclusion protection, server-side fare/PNR generation, and an outbox event.
+3. Add idempotency persistence and transactional response replay for booking creation.
+4. Add booking detail/list endpoints with ownership checks and seat/hold details.
+5. Verify Neon integration paths, including contention on the last seat and adjacent/overlapping journey segments.
+
+### Phase transition decision
+
+- At the user's direction, booking work starts against the existing Neon seed data while Phase 3 remains marked IN PROGRESS for authenticated RailRadar access and schedule import/refresh.
+- This is safe for the booking engine because train schedules, runs, seats, and fares are already stored in Postgres, and the booking path will use only that database state. External train data remains read-only and cannot grant inventory.
+- The Phase 3 deferral is explicit: live RailRadar confirmation requires an API key not currently configured; resilience wrappers for non-live provider methods and the static importer/weekly refresh also remain.
+
+## Phase 4: Booking Engine — STATUS: IN PROGRESS
+
+### Work completed so far
+
+- Added authenticated `POST /v1/bookings` with UUID v4 `Idempotency-Key` enforcement, request hashing, replay of the original successful response, and 422 rejection when a key is reused with a different request.
+- Added transaction-bound checks for scheduled run, 60-day booking window, future departure, ordered stops, passenger count from the shared schema, active same-user/run holds, and configured fare.
+- Added DB-time stale-hold expiry, DB-time 10-minute hold expiry, automatic or specific seat selection, deterministic specific-seat locks, half-open segment conflict checks, and the existing Postgres exclusion constraint as the final concurrency guard.
+- Added server-calculated integer-paise fares, PNR generation, passenger/seat allocations, `booking.held` outbox event, and an audit record in the same transaction.
+- Added an opt-in Neon integration test that creates two temporary users and verifies successful hold, identical idempotent replay, and rejection of a competing user for the same seat. Test data is cleaned up afterward.
+
+### Verification
+
+- `pnpm --filter @railgrid/api typecheck` ✅
+- `pnpm --filter @railgrid/api lint` ✅
+- `RAILGRID_INTEGRATION_TESTS=1 pnpm --filter @railgrid/api test -- src/routes/bookings.integration.test.ts` ✅ against Neon: first booking 201, same-key replay 201 with identical response, competing seat request 409 `SEAT_TAKEN`.
+- `git diff --check` ✅
+- Local smoke check ✅ web page returned HTTP 200 at `http://localhost:3000`; API `/health` and `/ready` returned HTTP 200, with both Neon and Redis reported healthy.
+
+### Remaining for Phase 4 acceptance
+
+- Add unit tests for fare rounding and half-open segment boundaries, plus integration coverage for adjacent segments, automatic selection under contention, same-user concurrent hold limits, and expired-but-unswept holds.
+- Add booking list/detail endpoints with ownership checks and expose hold and passenger details.
+- Add payment and cancellation phases only after booking hold acceptance; no payment provider credentials are needed for current booking work.
+
+### Configuration needed now
+
+- Neon pooled/direct URLs and local secrets are already configured in ignored `.env`; do not paste these into tracked files.
+- Docker Redis is running locally and the API/worker have connected to it in earlier verification.
+- No additional configuration is required to continue Phase 4 booking work against seeded inventory.
+- RailRadar API key is optional for the booking phase and required only to replace fixture/live-data fallback with authenticated external train updates. Resend and Razorpay configuration belongs to later notification/payment phases.
 
 ---
 

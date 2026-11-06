@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "data": {
+    "from": { "code": "UJN", "name": "Ujjain Jn" },
+    "to": { "code": "INDB", "name": "Indore Jn" },
+    "trains": [
+      {
+        "train": {
+          "number": "19304",
+          "name": "Bhopal - Indore Express",
+          "type": "Mail/Express",
+          "runDays": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+          "runningDaysBitmap": 127
+        },
+        "from": { "code": "UJN", "name": "Ujjain Jn", "city": "Ujjain", "departure": "03:05", "day": 2, "sequence": 25 },
+        "to": { "code": "INDB", "name": "Indore Jn", "city": "Indore", "arrival": "04:45", "day": 2, "sequence": 37 },
+        "distance": 79.4,
+        "duration": 100,
+        "totalHaltsBetween": 1
+      }
+    ],
+    "count": 24
+  },
+  "meta": { "timestamp": "2026-11-02T14:02:27+05:30", "executionTime": 5, "source": "database" }
+}

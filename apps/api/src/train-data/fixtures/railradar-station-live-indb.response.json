@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "data": {
+    "station": { "code": "INDB", "name": "Indore Jn", "city": "Indore", "elevation_m": 550, "lat": 22.717285, "lng": 75.867913 },
+    "window": { "from": "11:34", "to": "17:34", "hoursBack": 2, "hoursAhead": 4 },
+    "count": 1,
+    "trains": [
+      {
+        "train": { "number": "12920", "name": "Malwa SF Express", "type": "Superfast Express", "source": "SVDK", "destination": "DADN", "runDays": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] },
+        "stop": { "sequence": 234, "arrival": "13:35", "departure": "13:45", "day": 2, "distance": 1618.4, "isHalt": true, "platform": "4" },
+        "live": { "type": "at-station", "startDate": "2026-11-01", "expectedArrivalTime": "2026-11-02T13:35:00+05:30", "expectedDepartureTime": "2026-11-02T13:45:00+05:30", "delayMinutes": 0 }
+      }
+    ]
+  },
+  "meta": { "timestamp": "2026-11-02T13:34:39+05:30", "executionTime": 11, "source": "hybrid" }
+}

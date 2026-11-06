@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { FixtureProvider } from './fixture-provider.js';
 import { RailRadarProvider } from './provider.js';
 import { CircuitBreaker, MemoryDataCache, TrainDataService, type DataCache } from './service.js';
@@ -6,22 +7,38 @@ import { CircuitBreaker, MemoryDataCache, TrainDataService, type DataCache } fro
 const logger = { warn: vi.fn() };
 
 describe('RailRadar provider', () => {
+  it('normalizes the documented schedule and trains-between shapes', async () => {
+    const calls: string[] = [];
+    const scheduleFixture = readFileSync(new URL('./fixtures/railradar-schedule-12919.response.json', import.meta.url), 'utf8');
+    const betweenFixture = readFileSync(new URL('./fixtures/railradar-between-ujn-indb.response.json', import.meta.url), 'utf8');
+    const fetchImpl = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      calls.push(url);
+      return new Response(url.includes('/between/') ? betweenFixture : scheduleFixture, { status: 200 });
+    }) as unknown as typeof fetch;
+    const provider = new RailRadarProvider('test-key', fetchImpl);
+    const schedule = await provider.getTrain('12919');
+    const between = await provider.getTrainsBetween('UJN', 'INDB', '2026-11-07');
+    expect(schedule.route[0]).toMatchObject({ stationCode: 'DADN', departure: '11:50', distanceKm: 0 });
+    expect(between[0]).toMatchObject({ trainNumber: '19304', distanceKm: 79.4, durationMinutes: 100 });
+    expect(calls).toEqual([
+      'https://api.railradar.in/v1/trains/12919?haltsOnly=true',
+      'https://api.railradar.in/v1/trains/between/UJN/INDB?date=2026-11-07',
+    ]);
+  });
+
+  it('normalizes the documented station-board shape', async () => {
+    const fixture = readFileSync(new URL('./fixtures/railradar-station-live-indb.response.json', import.meta.url), 'utf8');
+    const provider = new RailRadarProvider('test-key', async () => new Response(fixture, { status: 200 }));
+    await expect(provider.getStationBoard('INDB')).resolves.toMatchObject([
+      { trainNumber: '12920', platform: '4', liveType: 'at-station', delayMinutes: 0 },
+    ]);
+  });
+
   it('validates the documented envelope and normalizes live status', async () => {
+    const fixture = readFileSync(new URL('./fixtures/railradar-live-12919.response.json', import.meta.url), 'utf8');
     const fetchImpl = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          success: true,
-          data: {
-            trainNumber: '12919',
-            lastUpdatedAt: '2026-11-02T14:01:51+05:30',
-            delayMinutes: 4,
-            currentLocation: { stationCode: 'UJN', stationName: 'Ujjain Jn' },
-            nextHalt: { stationCode: 'MKC', stationName: 'Maksi Jn' },
-          },
-          meta: { timestamp: '2026-11-02T14:02:28+05:30', traceId: 'fixture', source: 'hybrid' },
-        }),
-        { status: 200 },
-      ),
+      new Response(fixture, { status: 200 }),
     );
     const provider = new RailRadarProvider('test-key', fetchImpl);
     const status = await provider.getLiveStatus('12919', '2026-11-02');
@@ -104,7 +121,13 @@ describe('train data cache and resilience', () => {
       unlock: (lockKey, token) => cache.unlock(lockKey, token),
       reserveQuota: async () => 'cache-only',
     };
-    const provider = { name: 'railradar', getLiveStatus: vi.fn() };
+    const provider = {
+      name: 'railradar',
+      getTrain: vi.fn(),
+      getLiveStatus: vi.fn(),
+      getTrainsBetween: vi.fn(),
+      getStationBoard: vi.fn(),
+    };
     const service = new TrainDataService(provider, quotaCache, 100, 10, logger);
     const status = await service.getLiveStatus('12919');
     expect(status.stale).toBe(true);

@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  transpilePackages: ['@railgrid/shared'],
   experimental: {
     typedRoutes: true,
   },
@@ -15,6 +16,13 @@ const nextConfig = {
         ],
       },
     ];
+  },
+  webpack(config) {
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      '.js': ['.js', '.ts', '.tsx'],
+    };
+    return config;
   },
 };
 

@@ -1,0 +1,33 @@
+{
+  "success": true,
+  "data": {
+    "train": {
+      "number": "12919",
+      "name": "Malwa SF Express",
+      "type": "Superfast Express",
+      "source": { "code": "DADN", "name": "Dr. Ambedkar Nagar" },
+      "destination": { "code": "SVDK", "name": "Shri Mata Vaishno Devi Katra" }
+    },
+    "route": [
+      {
+        "sequence": 1,
+        "station": { "code": "DADN", "name": "Dr. Ambedkar Nagar" },
+        "isHalt": true,
+        "departure": "11:50",
+        "departureDay": 1,
+        "distance": 0
+      },
+      {
+        "sequence": 7,
+        "station": { "code": "INDB", "name": "Indore Jn" },
+        "isHalt": true,
+        "arrival": "12:05",
+        "arrivalDay": 1,
+        "departure": "12:15",
+        "departureDay": 1,
+        "distance": 21.1
+      }
+    ]
+  },
+  "meta": { "timestamp": "2026-11-02T13:58:11+05:30", "source": "database" }
+}

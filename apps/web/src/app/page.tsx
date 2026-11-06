@@ -1,3 +1,5 @@
+import { LiveStatusBoard } from '../components/live-status-board';
+
 export default function HomePage() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-4">
@@ -15,18 +17,7 @@ export default function HomePage() {
           <span className="text-amber">Test mode payments only</span>
         </p>
 
-        {/* Status board placeholder */}
-        <div className="bg-ink border border-steel/30 rounded p-6 font-mono text-sm text-left">
-          <div className="text-steel mb-2">── DEPARTURE BOARD ──────────────────</div>
-          <div className="flex justify-between text-chalk/50">
-            <span>TRAIN</span>
-            <span>DEPARTS</span>
-            <span>STATUS</span>
-          </div>
-          <div className="mt-2 text-chalk/30 text-center py-4">
-            Search to see trains...
-          </div>
-        </div>
+        <LiveStatusBoard />
 
         <a
           href="/auth/login"
