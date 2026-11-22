@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import websocket from '@fastify/websocket';
 import { ZodTypeProvider, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import type { Env } from '@railgrid/shared';
 import { Redis } from 'ioredis';
@@ -10,6 +11,8 @@ import { authRoutes } from './routes/auth.js';
 import { trainDataRoutes } from './routes/train-data.js';
 import { bookingRoutes } from './routes/bookings.js';
 import { paymentRoutes } from './routes/payments.js';
+import { wsRoutes } from './routes/ws.js';
+import { waitingRoomRoutes } from './routes/waiting-room.js';
 import { errorHandler } from './plugins/error-handler.js';
 import { requestId } from './plugins/request-id.js';
 import { rateLimit } from './plugins/rate-limit.js';
@@ -101,6 +104,9 @@ export async function buildApp({ env }: AppOptions) {
     ]),
   );
 
+  // WebSocket plugin must be registered before ws routes
+  await app.register(websocket);
+
   // Routes
   await app.register(healthRoutes, { prefix: '' });
   await app.register(metricsRoutes, { prefix: '' });
@@ -108,6 +114,8 @@ export async function buildApp({ env }: AppOptions) {
   await app.register(bookingRoutes, { prefix: '/v1/bookings' });
   await app.register(paymentRoutes, { prefix: '/v1' });
   await app.register(async (router) => trainDataRoutes(router, trainDataService), { prefix: '/v1' });
+  await app.register(wsRoutes, { prefix: '/v1' });
+  await app.register(waitingRoomRoutes, { prefix: '/v1' });
 
   return app;
 }

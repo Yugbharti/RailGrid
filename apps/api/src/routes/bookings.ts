@@ -177,6 +177,24 @@ export async function bookingRoutes(app: FastifyInstance) {
         fail(400, ERROR_CODES.VALIDATION_ERROR, 'A UUID v4 Idempotency-Key header is required.');
       }
       const result = await createHold(request.body, request.authUser!.sub, request.id, key);
+      if (!result.replay && result.statusCode === 201) {
+        try {
+          const bookingData = (result.body as { booking?: { runId: string; seats: Array<{ id: string }> } })?.booking;
+          if (bookingData?.runId) {
+            await app.redis.publish(
+              `run:${bookingData.runId}`,
+              JSON.stringify({
+                event: 'seat.held',
+                runId: bookingData.runId,
+                seatIds: bookingData.seats.map((s) => s.id),
+                ts: Date.now(),
+              }),
+            );
+          }
+        } catch {
+          // Redis publish is best-effort
+        }
+      }
       return reply.code(result.statusCode).send(result.body);
     },
   );

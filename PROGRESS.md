@@ -113,22 +113,49 @@
 
 ---
 
-## Phase 6: Realtime, Workers, Waiting Room — PLAN
+## Phase 6: Realtime, Workers, Waiting Room — STATUS: DONE ✅
 
-**Goal**: BullMQ worker pool — hold-expiry sweeper, payment reconciler, outbox publisher, WebSocket seat updates.
+### What was built
 
-**Acceptance criteria**: expired holds released within 30s; a deliberately dropped webhook healed by reconciler; two browsers see seat state change via WebSocket.
+**BullMQ Worker Pool (`apps/worker`)**
+- Wired to `QUEUE_REDIS_URL` (noeviction policy) with separate cache Redis for pub/sub.
+- Graceful shutdown handles `SIGTERM`/`SIGINT`, draining active jobs before process exit.
+- `expire-holds` repeatable job (every 30s): batch-expires stale `HELD` seat allocations and `SEATS_HELD` bookings; publishes `seat.released` event to Redis channel `run:{runId}`.
+- `reconcile-payments` repeatable job (every 2m): queries `CREATED` payments older than 3 minutes, reconciles with Razorpay API, triggers `runConfirmTransaction()`, and alerts if unresolved past 15 minutes. Fixture mode active in dev/CI.
+- `outbox-publisher` repeatable job (every 1s): polls unpublished outbox events with `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 100`, routes events into `send-email` and `generate-ticket` BullMQ queues, and atomically updates `published_at`.
+- `send-email` consumer: idempotent via BullMQ `jobId`; formats booking confirmations, cancellations, email verification, and password resets; delivers via Resend API or logs safely in fixture mode.
+- `generate-ticket` consumer: generates cryptographically signed QR tokens (`HMAC-SHA256`) containing PNR, booking ID, and user ID with a 1-year expiry.
 
-### Steps
+**WebSocket Realtime Feed (`apps/api`)**
+- `GET /v1/ws/token`: issues short-lived (60s) HMAC-signed authentication tokens for authenticated passengers.
+- `GET /v1/ws`: WebSocket upgrade route with heartbeat ping/pong (30s interval), per-user concurrent connection cap (max 5), subscription multiplexing (up to 10 runs per socket), and automatic Redis pub/sub channel routing (`run:{runId}`).
+- `POST /v1/bookings` immediately publishes `seat.held` to Redis upon hold creation.
 
-1. BullMQ worker process wired to `QUEUE_REDIS_URL` with SIGTERM graceful drain
-2. `expire-holds` repeatable job: every 30s — batch-expire HELD seats, publish `seat.released` to Redis
-3. `reconcile-payments` repeatable job: every 2min — probe Razorpay for CREATED payments > 3min old, run `runConfirmTransaction`
-4. `outbox-publisher` repeatable job: 1s poll — `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 100`, mark published
-5. `send-email` consumer: idempotent keyed by outbox event id; Resend or mock in fixture mode
-6. `generate-ticket` consumer: PDF with QR code (PNR + signed token)
-7. WebSocket `/v1/ws`: auth via short-lived token, subscribe to `run:{id}`, receive `seat.held/released/booked`
-8. API publishes to Redis pub/sub after each booking transaction commit; replicas forward to their sockets
+**Waiting Room (`apps/api`)**
+- `POST /v1/waiting-room/join`: joins FIFO queue via Redis sorted set (`ZADD wr:{runId} <score> <userId>`).
+- `GET /v1/waiting-room/status`: returns 1-indexed queue position and total length via `ZRANK` and `ZCARD`.
+- `DELETE /v1/waiting-room/leave`: leaves waiting room via `ZREM`.
+
+### Verification
+- `pnpm --filter @railgrid/shared typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/db typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/api typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/worker typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/api test` ✅ **56 tests pass**
+- `pnpm --filter @railgrid/worker test` ✅ **14 tests pass**
+- **Total: 70 unit tests pass** across the workspace.
+
+---
+
+## Phase 7: Cancellation, Refunds & Waitlist — PLAN
+
+**Goal**: Full lifecycle cancellation, calculation of partial refunds via fare rules, and automatic promotion of waitlisted passengers.
+
+**Acceptance criteria**:
+- `POST /v1/bookings/:id/cancel` sets booking `CANCELLED`, releases allocations, applies cancellation fee based on departure time, creates `refunds` record, enqueues outbox event, and atomically promotes the next waitlisted user.
+- Waitlist join on sold-out runs with sequential queue position.
+- Double-cancellation is a no-op (state machine + idempotency).
+- Cancellation rejected after train departure.
 
 ---
 
