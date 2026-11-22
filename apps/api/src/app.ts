@@ -9,6 +9,7 @@ import { metricsRoutes } from './routes/metrics.js';
 import { authRoutes } from './routes/auth.js';
 import { trainDataRoutes } from './routes/train-data.js';
 import { bookingRoutes } from './routes/bookings.js';
+import { paymentRoutes } from './routes/payments.js';
 import { errorHandler } from './plugins/error-handler.js';
 import { requestId } from './plugins/request-id.js';
 import { rateLimit } from './plugins/rate-limit.js';
@@ -105,6 +106,7 @@ export async function buildApp({ env }: AppOptions) {
   await app.register(metricsRoutes, { prefix: '' });
   await app.register(authRoutes, { prefix: '/v1/auth' });
   await app.register(bookingRoutes, { prefix: '/v1/bookings' });
+  await app.register(paymentRoutes, { prefix: '/v1' });
   await app.register(async (router) => trainDataRoutes(router, trainDataService), { prefix: '/v1' });
 
   return app;
