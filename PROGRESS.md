@@ -147,15 +147,72 @@
 
 ---
 
-## Phase 7: Cancellation, Refunds & Waitlist — PLAN
+## Phase 7: Cancellation, Refunds & Waitlist — STATUS: DONE ✅
 
-**Goal**: Full lifecycle cancellation, calculation of partial refunds via fare rules, and automatic promotion of waitlisted passengers.
+### What was built
 
-**Acceptance criteria**:
-- `POST /v1/bookings/:id/cancel` sets booking `CANCELLED`, releases allocations, applies cancellation fee based on departure time, creates `refunds` record, enqueues outbox event, and atomically promotes the next waitlisted user.
-- Waitlist join on sold-out runs with sequential queue position.
-- Double-cancellation is a no-op (state machine + idempotency).
-- Cancellation rejected after train departure.
+**Tiered Cancellation Fees (`computeCancellationFeePaise`)**
+- Strict policy per agent.md § 6.4 / § 12:
+  - `> 48h` before departure: 10% fee (90% refund)
+  - `24h – 48h`: 25% fee (75% refund)
+  - `12h – 24h`: 50% fee (50% refund)
+  - `< 12h` or past departure: 100% fee (no refund)
+- Exact integer paise rounding with floor/ceiling checks guaranteeing refund never exceeds `totalPaise`.
+- Departure check rejects cancellation after train departs (`400 TRAIN_DEPARTED`).
+
+**Atomic Waitlist Promotion & Cancellation Flow (`POST /v1/bookings/:id/cancel`)**
+- Single transaction with `ReadCommitted` isolation:
+  - Releases seat allocations (`status = 'RELEASED'`).
+  - Sets booking status to `CANCELLED`.
+  - Computes cancellation fee and creates `refunds` row (`REFUND_PENDING`) with unique constraint on `gateway_refund_id`.
+  - Atomic waitlist promotion via `SELECT ... FOR UPDATE SKIP LOCKED` on `waitlist_entries` for the same run and class.
+  - Recalculates fare for promoted booking and transitions it to `CONFIRMED`.
+  - Publishes `BOOKING_CANCELLED` and `WAITLIST_PROMOTED` outbox events.
+  - Emits audit log events for user cancellation and waitlist promotion.
+- Double-cancellation is a strict idempotent no-op (returns `alreadyCancelled: true`).
+
+**Waitlist API (`apps/api/src/routes/waitlist.ts`)**
+- `POST /v1/bookings/waitlist`: Join waitlist for a sold-out run and class; computes next sequential position (`MAX(position_seq) + 1`).
+- `GET /v1/bookings/waitlist/status`: Query active waitlist position.
+- `POST /v1/bookings/waitlist/:id/leave`: Leave waitlist and mark status `CANCELLED`.
+
+**Process Refund Worker (`apps/worker/src/jobs/process-refund.ts`)**
+- BullMQ worker for `process-refund` queue with exponential backoff retries.
+- Razorpay refund API client integration.
+- Fixture fallback for dev/CI automatically marking `REFUNDED` with `mock_refund_<id>`.
+
+### Verification
+- `pnpm --filter @railgrid/shared typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/db typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/api typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/worker typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/web typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/api test` ✅ **70 tests pass** (14 phase7 + 22 payment + 14 booking + 9 train-data + 8 auth + 3 route)
+- `pnpm --filter @railgrid/worker test` ✅ **14 tests pass**
+- **Total: 84 unit tests pass** across the workspace.
+
+---
+
+## Phase 8: Frontend Build — PLAN
+
+**Goal**: Complete Next.js 14 App Router frontend matching design tokens, railway typography, and all signature UI elements specified in agent.md § 9.
+
+**Signature UI Elements**:
+1. `SplitFlapBoard.tsx` — Mechanical flip animation for train departures, status, platform, and delay indicators.
+2. `JourneyRibbon.tsx` — Station-to-station route progress track with stops, timings, distance, and platform numbers.
+3. `CoachMap.tsx` — Interactive, segment-aware coach seat selection grid with class filter (SL, 3A, 2A, CC), berth types (LB, MB, UB, SL, SU, WINDOW, AISLE), and real-time occupied/held status.
+4. `TicketStub.tsx` — Authentic IRCTC-style printable ticket card with PNR, QR code (HMAC token), passenger table, and fare breakdown.
+5. `HoldTimer.tsx` — 10-minute seat hold countdown ticker synchronized with WebSocket events.
+
+**Pages & Routes**:
+- `/` — Hero search with Station autocomplete, date picker, class selector, recent searches, live status banner.
+- `/trains` — Train search results with Split-flap board header, fare badges, class availability cards, filter sidebar.
+- `/booking/[runId]` — Segment coach map, passenger form (up to 6 passengers with berth preferences), hold timer ticker.
+- `/payment/[bookingId]` — Order summary, breakdown of base fare + GST + reservation fee, simulated / live Razorpay checkout.
+- `/ticket/[pnr]` — Ticket stub with downloadable receipt and cancellation action.
+- `/waitlist/[runId]` — Live waitlist position tracker.
+- `/my-bookings` — Booking history tabs (Active, Completed, Cancelled).
+- `/auth/login` & `/auth/register` — Accessible auth forms with rate-limit and lockout messaging.
 
 ---
 

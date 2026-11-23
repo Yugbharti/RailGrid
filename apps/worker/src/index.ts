@@ -1,5 +1,5 @@
 /**
- * RailGrid Worker — Phase 6
+ * RailGrid Worker — Phase 6 & 7
  *
  * Registers BullMQ workers and schedulers:
  *   - expire-holds       (every 30s)
@@ -28,6 +28,7 @@ import {
 } from './jobs/outbox-publisher.js';
 import { sendEmailProcessor } from './jobs/send-email.js';
 import { generateTicketProcessor } from './jobs/generate-ticket.js';
+import { PROCESS_REFUND_QUEUE, processRefundProcessor } from './jobs/process-refund.js';
 
 const env = parseEnv(process.env);
 
@@ -100,12 +101,19 @@ const generateTicketWorker = new Worker(
   { connection: createQueueRedis(), concurrency: 3 },
 );
 
+const processRefundWorker = new Worker(
+  PROCESS_REFUND_QUEUE,
+  processRefundProcessor(env.RAZORPAY_KEY_ID, env.RAZORPAY_KEY_SECRET, logger),
+  { connection: createQueueRedis(), concurrency: 3 },
+);
+
 const allWorkers: Worker[] = [
   expireHoldsWorker,
   reconcileWorker,
   outboxWorker,
   sendEmailWorker,
   generateTicketWorker,
+  processRefundWorker,
 ];
 const allQueues: Queue[] = [
   expireHoldsQueue,

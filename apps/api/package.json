@@ -19,6 +19,7 @@
     "@railgrid/db": "workspace:*",
     "@railgrid/shared": "workspace:*",
     "argon2": "^0.45.2",
+    "bullmq": "^5.8.2",
     "fastify": "^4.27.0",
     "fastify-plugin": "^4.5.1",
     "fastify-type-provider-zod": "^1.1.9",

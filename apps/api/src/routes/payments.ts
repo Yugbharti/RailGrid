@@ -1,19 +1,19 @@
 /**
- * Phase 5 — Payments
+ * Phase 5 â€” Payments
  *
  * Implements:
- *   POST /v1/bookings/:id/pay          → create Razorpay order, extend hold once
- *   POST /v1/payments/verify           → optimistic HMAC verify (browser redirect path)
- *   POST /v1/webhooks/razorpay         → source-of-truth webhook (raw body, signature)
- *   GET  /v1/bookings/:id              → booking detail with seats, passengers, payment
- *   GET  /v1/bookings                  → user's bookings list
- *   POST /v1/bookings/:id/cancel       → cancel + release seats (waitlist promotion deferred to Phase 7)
+ *   POST /v1/bookings/:id/pay          â†’ create Razorpay order, extend hold once
+ *   POST /v1/payments/verify           â†’ optimistic HMAC verify (browser redirect path)
+ *   POST /v1/webhooks/razorpay         â†’ source-of-truth webhook (raw body, signature)
+ *   GET  /v1/bookings/:id              â†’ booking detail with seats, passengers, payment
+ *   GET  /v1/bookings                  â†’ user's bookings list
+ *   POST /v1/bookings/:id/cancel       â†’ cancel + release seats (waitlist promotion deferred to Phase 7)
  *
  * Security rules enforced:
- *   - Amount/status NEVER trusted from client — always from DB
+ *   - Amount/status NEVER trusted from client â€” always from DB
  *   - Webhook verified on raw body before parsing
  *   - Duplicate webhook events ignored via payment_events.gateway_event_id UNIQUE
- *   - Late payment (booking EXPIRED) → re-acquire seats or auto-refund via REFUND_DUE
+ *   - Late payment (booking EXPIRED) â†’ re-acquire seats or auto-refund via REFUND_DUE
  *   - All mutating endpoints require Idempotency-Key (UUID v4)
  */
 import { createHash, createHmac, timingSafeEqual, randomUUID } from 'node:crypto';
@@ -25,7 +25,7 @@ import { authenticate } from '../auth/guard.js';
 
 export { runConfirmTransaction };
 
-// ── Shared utilities ──────────────────────────────────────────────────────────
+// â”€â”€ Shared utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class PaymentError extends Error {
   constructor(
@@ -63,7 +63,7 @@ function verifyRazorpaySignature(data: string, signature: string, secret: string
   }
 }
 
-// ── Idempotency helper (reusable for pay / cancel) ───────────────────────────
+// â”€â”€ Idempotency helper (reusable for pay / cancel) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function checkIdempotency(
   userId: string,
@@ -116,7 +116,7 @@ function requireIdempotencyKey(request: FastifyRequest): string {
   return key;
 }
 
-// ── Razorpay mock / abstraction ───────────────────────────────────────────────
+// â”€â”€ Razorpay mock / abstraction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // In test/fixture mode (no RAZORPAY_KEY_ID set) we return a deterministic mock order.
 
 interface RazorpayOrder {
@@ -157,13 +157,13 @@ async function createRazorpayOrder(
   return response.json() as Promise<RazorpayOrder>;
 }
 
-// ── Route registration ────────────────────────────────────────────────────────
+// â”€â”€ Route registration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function paymentRoutes(app: FastifyInstance) {
   const env = app.env;
   const PAYMENT_EXTENSION_SECONDS = env.PAYMENT_EXTENSION_SECONDS ?? 300;
 
-  // ── GET /v1/bookings ─────────────────────────────────────────────────────
+  // â”€â”€ GET /v1/bookings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   app.get('/bookings', { preHandler: authenticate }, async (request, reply) => {
     const userId = request.authUser!.sub;
     const bookings = await prisma.booking.findMany({
@@ -180,7 +180,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     return reply.send({ bookings: bookings.map((b) => ({ ...b, runId: b.runId.toString() })) });
   });
 
-  // ── GET /v1/bookings/:id ─────────────────────────────────────────────────
+  // â”€â”€ GET /v1/bookings/:id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   app.get<{ Params: { id: string } }>(
     '/bookings/:id',
     { preHandler: authenticate },
@@ -216,7 +216,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     },
   );
 
-  // ── POST /v1/bookings/:id/pay ────────────────────────────────────────────
+  // â”€â”€ POST /v1/bookings/:id/pay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const paySchema = z.object({});
   app.post<{ Params: { id: string }; Body: z.infer<typeof paySchema> }>(
     '/bookings/:id/pay',
@@ -305,7 +305,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     },
   );
 
-  // ── POST /v1/payments/verify ─────────────────────────────────────────────
+  // â”€â”€ POST /v1/payments/verify â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Optimistic UX path: browser sends signature after Razorpay checkout succeeds.
   const verifySchema = z.object({
     razorpay_payment_id: z.string().min(1),
@@ -356,7 +356,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     },
   );
 
-  // ── POST /v1/webhooks/razorpay ───────────────────────────────────────────
+  // â”€â”€ POST /v1/webhooks/razorpay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Source of truth. Raw body required for signature. Dedupes via payment_events UNIQUE.
   app.post(
     '/webhooks/razorpay',
@@ -396,7 +396,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         const eventId = request.headers['x-razorpay-event-id'] as string | undefined ?? `${eventType}:${Date.now()}:${randomUUID()}`;
         const paymentEntity = payload.payload?.payment?.entity;
 
-        // Dedupe: insert into payment_events; on conflict (duplicate event) → skip
+        // Dedupe: insert into payment_events; on conflict (duplicate event) â†’ skip
         const inserted = await prisma.$queryRaw<Array<{ id: bigint }>>`
           INSERT INTO payment_events (gateway_event_id, type, payload, processed_at)
           VALUES (${eventId}, ${eventType}, ${JSON.stringify(payload)}::jsonb, now())
@@ -446,7 +446,9 @@ export async function paymentRoutes(app: FastifyInstance) {
     },
   );
 
+
   // ── POST /v1/bookings/:id/cancel ─────────────────────────────────────────
+  // Phase 7: Tiered cancellation fee + atomic waitlist promotion
   app.post<{ Params: { id: string } }>(
     '/bookings/:id/cancel',
     { preHandler: authenticate },
@@ -461,9 +463,11 @@ export async function paymentRoutes(app: FastifyInstance) {
       if (idem.replay) return reply.code(idem.statusCode).send(idem.body);
 
       const result = await prisma.$transaction(async (tx) => {
+        // Lock the booking row
         const rows = await tx.$queryRaw<
-          Array<{ id: string; status: string; total_paise: number; user_id: string; run_id: bigint }>
-        >`SELECT id, status, total_paise, user_id, run_id FROM bookings WHERE id = ${bookingId} FOR UPDATE`;
+          Array<{ id: string; status: string; total_paise: number; user_id: string; run_id: bigint; class_code: string; from_idx: number; to_idx: number }>
+        >`SELECT id, status, total_paise, user_id, run_id, class_code, from_idx, to_idx
+          FROM bookings WHERE id = ${bookingId}::uuid FOR UPDATE`;
         const b = rows[0];
         if (!b) fail(404, ERROR_CODES.NOT_FOUND, 'Booking not found.');
         if (b.user_id !== userId) fail(403, ERROR_CODES.FORBIDDEN, 'Access denied.');
@@ -471,49 +475,222 @@ export async function paymentRoutes(app: FastifyInstance) {
         const cancellableStatuses = ['SEATS_HELD', 'PAYMENT_PENDING', 'CONFIRMED'];
         if (!cancellableStatuses.includes(b.status)) {
           if (b.status === 'CANCELLED') {
-            // Already cancelled — idempotent
-            return { status: 'CANCELLED', refundPaise: 0, alreadyCancelled: true };
+            // Already cancelled — idempotent no-op
+            return { status: 'CANCELLED', refundPaise: 0, refundId: null, cancelFee: 0, alreadyCancelled: true };
           }
           fail(409, ERROR_CODES.BOOKING_EXPIRED, `Cannot cancel a booking in status ${b.status}.`);
         }
 
-        // Check departure hasn't passed (block post-departure cancellation server-side)
-        const departed = await tx.$queryRaw<Array<{ departed: boolean }>>`
-          SELECT ((r.journey_date + (s.departure::time + make_interval(days => s.day_offset))) <= now()) AS departed
-          FROM bookings bk JOIN runs r ON r.id = bk.run_id
+        // ── Departure check + hours until departure ──────────────────────────
+        const depInfo = await tx.$queryRaw<Array<{ departed: boolean; hours_until: number }>>`
+          SELECT
+            ((r.journey_date + (s.departure::time + make_interval(days => s.day_offset))) <= now()) AS departed,
+            GREATEST(0,
+              EXTRACT(EPOCH FROM (
+                (r.journey_date + (s.departure::time + make_interval(days => s.day_offset))) - now()
+              )) / 3600.0
+            )::float AS hours_until
+          FROM bookings bk
+          JOIN runs r ON r.id = bk.run_id
           JOIN train_stops s ON s.train_number = r.train_number AND s.stop_idx = bk.from_idx
-          WHERE bk.id = ${bookingId}`;
-        if (departed[0]?.departed)
+          WHERE bk.id = ${bookingId}::uuid`;
+
+        if (depInfo[0]?.departed)
           fail(409, ERROR_CODES.TRAIN_DEPARTED, 'Cancellation is not allowed after departure.');
 
-        // Release seat allocations
-        await tx.$executeRaw`
-          UPDATE seat_allocations SET status = 'RELEASED', updated_at = now()
-          WHERE booking_id = ${bookingId} AND status IN ('HELD','CONFIRMED')`;
+        const hoursUntil: number = depInfo[0]?.hours_until ?? 999;
 
-        // Cancel booking
-        await tx.booking.update({ where: { id: bookingId }, data: { status: 'CANCELLED', updatedAt: new Date() } });
+        // ── Release seat allocations ─────────────────────────────────────────
+        const releasedSeats = await tx.$queryRaw<Array<{ seat_id: bigint }>>`
+          UPDATE seat_allocations
+          SET status = 'RELEASED', updated_at = now()
+          WHERE booking_id = ${bookingId}::uuid AND status IN ('HELD','CONFIRMED')
+          RETURNING seat_id`;
 
-        // Compute refund (simplified: full refund for now; partial cancellation fees could use fare_rules)
+        // ── Cancel booking ───────────────────────────────────────────────────
+        await tx.booking.update({
+          where: { id: bookingId },
+          data: { status: 'CANCELLED', updatedAt: new Date() },
+        });
+
+        // ── Tiered cancellation fee (agent.md § 6.4 / § 12) ─────────────────
+        // > 48h: 10% fee | 24–48h: 25% | 12–24h: 50% | < 12h: 100% (no refund)
         const capturedPayment = await tx.payment.findFirst({
           where: { bookingId, status: 'CAPTURED' },
           select: { id: true, amountPaise: true },
         });
 
         let refundPaise = 0;
+        let cancelFee = 0;
+        let refundDbId: bigint | null = null;
+
         if (capturedPayment) {
-          refundPaise = capturedPayment.amountPaise;
-          await tx.refund.create({
-            data: { paymentId: capturedPayment.id, amountPaise: refundPaise, status: 'REFUND_PENDING', reason: 'user_cancellation' },
-          });
-          await tx.payment.update({ where: { id: capturedPayment.id }, data: { status: 'REFUND_PENDING', updatedAt: new Date() } });
+          if (hoursUntil >= 48)      cancelFee = Math.round(capturedPayment.amountPaise * 0.10);
+          else if (hoursUntil >= 24) cancelFee = Math.round(capturedPayment.amountPaise * 0.25);
+          else if (hoursUntil >= 12) cancelFee = Math.round(capturedPayment.amountPaise * 0.50);
+          else                       cancelFee = capturedPayment.amountPaise; // no refund
+
+          refundPaise = capturedPayment.amountPaise - cancelFee;
+
+          if (refundPaise > 0) {
+            const refundRow = await tx.refund.create({
+              data: {
+                paymentId: capturedPayment.id,
+                amountPaise: refundPaise,
+                status: 'REFUND_PENDING',
+                reason: `user_cancellation_${Math.round(hoursUntil)}h_before_departure`,
+              },
+            });
+            refundDbId = refundRow.id;
+            await tx.payment.update({
+              where: { id: capturedPayment.id },
+              data: { status: 'REFUND_PENDING', updatedAt: new Date() },
+            });
+          }
         }
 
-        await tx.outboxEvent.create({ data: { type: 'booking.cancelled', aggregateId: bookingId, payload: { bookingId, refundPaise } as Prisma.InputJsonObject } });
-        await tx.auditLog.create({ data: { actor: userId, entity: 'booking', entityId: bookingId, fromState: b.status, toState: 'CANCELLED', reason: 'user_cancellation' } });
+        // ── Atomic waitlist promotion ────────────────────────────────────────
+        // After releasing seats, check if any waitlist candidate can be promoted.
+        const seatIds = releasedSeats.map((s) => s.seat_id);
+        if (seatIds.length > 0) {
+          // Lock the next WAITING waitlist entry FIFO by positionSeq, SKIP LOCKED for concurrency
+          const nextWaiting = await tx.$queryRaw<Array<{ id: bigint; booking_id: string }>>`
+            SELECT we.id, we.booking_id
+            FROM waitlist_entries we
+            WHERE we.run_id = ${b.run_id}
+              AND we.class_code = ${b.class_code}
+              AND we.status = 'WAITING'
+            ORDER BY we.position_seq ASC
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED`;
 
-        return { status: 'CANCELLED', refundPaise, alreadyCancelled: false };
+          if (nextWaiting.length > 0) {
+            const candidate = nextWaiting[0]!;
+
+            // Allocate freed seats to promoted booking
+            await tx.$executeRaw`
+              INSERT INTO seat_allocations
+                (run_id, seat_id, booking_id, from_idx, to_idx, status, hold_expires_at, created_at, updated_at)
+              SELECT ${b.run_id}, s.id, ${candidate.booking_id}::uuid,
+                     ${b.from_idx}, ${b.to_idx}, 'CONFIRMED', NULL, now(), now()
+              FROM seats s WHERE s.id = ANY(${seatIds}::bigint[])
+              ON CONFLICT DO NOTHING`;
+
+            // Compute fare for promoted booking using fare_rules
+            const promoBooking = await tx.booking.findUnique({
+              where: { id: candidate.booking_id },
+              select: {
+                fromIdx: true,
+                toIdx: true,
+                classCode: true,
+                run: { select: { trainNumber: true, train: { select: { isSuperfast: true } } } },
+                passengers: { select: { id: true } },
+              },
+            });
+
+            if (promoBooking) {
+              const fareRule = await tx.fareRule.findUnique({ where: { classCode: promoBooking.classCode } });
+              const stops = await tx.trainStop.findMany({
+                where: {
+                  trainNumber: promoBooking.run.trainNumber,
+                  stopIdx: { in: [promoBooking.fromIdx, Math.max(promoBooking.fromIdx, promoBooking.toIdx - 1)] },
+                },
+                select: { stopIdx: true, distanceKm: true },
+              });
+              const fromStop = stops.find((s) => s.stopIdx === promoBooking.fromIdx);
+              const toStop   = stops.find((s) => s.stopIdx === promoBooking.toIdx - 1) ?? stops.find((s) => s.stopIdx !== promoBooking.fromIdx);
+              const distKm   = Math.abs((toStop?.distanceKm ?? 0) - (fromStop?.distanceKm ?? 0));
+              const perKm    = fareRule?.perKmPaise ?? 50;
+              const base     = fareRule?.basePaise ?? 500;
+              const resFee   = fareRule?.reservationFeePaise ?? 50;
+              const sfFee    = promoBooking.run.train.isSuperfast ? (fareRule?.superfastFeePaise ?? 75) : 0;
+              const count    = promoBooking.passengers.length || seatIds.length;
+              const totalPaise = Math.round((base + distKm * perKm + resFee + sfFee) * count);
+
+              await tx.booking.update({
+                where: { id: candidate.booking_id },
+                data: { status: 'CONFIRMED', totalPaise, updatedAt: new Date() },
+              });
+            }
+
+            // Promote waitlist entry
+            await tx.waitlistEntry.update({
+              where: { id: candidate.id },
+              data: { status: 'PROMOTED', updatedAt: new Date() },
+            });
+
+            await tx.outboxEvent.create({
+              data: {
+                type: 'booking.promoted_from_waitlist',
+                aggregateId: candidate.booking_id,
+                payload: { bookingId: candidate.booking_id, promotedFrom: bookingId } as Prisma.InputJsonObject,
+              },
+            });
+            await tx.auditLog.create({
+              data: {
+                actor: 'system',
+                entity: 'booking',
+                entityId: candidate.booking_id,
+                fromState: 'WAITLISTED',
+                toState: 'CONFIRMED',
+                reason: 'waitlist_promotion',
+              },
+            });
+          }
+        }
+
+        // ── Outbox + audit for cancellation ─────────────────────────────────
+        await tx.outboxEvent.create({
+          data: {
+            type: 'booking.cancelled',
+            aggregateId: bookingId,
+            payload: {
+              bookingId,
+              refundPaise,
+              cancelFee,
+              refundId: refundDbId ? String(refundDbId) : null,
+            } as Prisma.InputJsonObject,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            actor: userId,
+            entity: 'booking',
+            entityId: bookingId,
+            fromState: b.status,
+            toState: 'CANCELLED',
+            reason: 'user_cancellation',
+          },
+        });
+
+        return {
+          status: 'CANCELLED',
+          refundPaise,
+          cancelFee,
+          refundId: refundDbId ? String(refundDbId) : null,
+          alreadyCancelled: false,
+        };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+
+      // Enqueue refund processing job (best-effort)
+      if (result.refundId && !result.alreadyCancelled) {
+        try {
+          const { Queue } = await import('bullmq');
+          const queueRedisUrl = env.QUEUE_REDIS_URL;
+          const urlObj = new URL(queueRedisUrl.startsWith('redis://') ? queueRedisUrl : `redis://${queueRedisUrl}`);
+          const refundQueue = new Queue('process-refund', {
+            connection: { host: urlObj.hostname, port: parseInt(urlObj.port || '6380') },
+          });
+          await refundQueue.add('refund', { refundId: result.refundId }, {
+            jobId: `refund:${result.refundId}`,
+            attempts: 5,
+            backoff: { type: 'exponential', delay: 5_000 },
+          });
+          await refundQueue.close();
+        } catch {
+          request.log.warn({ refundId: result.refundId }, 'Failed to enqueue refund job; reconciler will retry');
+        }
+      }
 
       const body = { bookingId, ...result };
       await completeIdempotency(userId, idempotencyKey, 200, body as Prisma.InputJsonObject);

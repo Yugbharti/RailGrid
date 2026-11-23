@@ -13,6 +13,7 @@ import { bookingRoutes } from './routes/bookings.js';
 import { paymentRoutes } from './routes/payments.js';
 import { wsRoutes } from './routes/ws.js';
 import { waitingRoomRoutes } from './routes/waiting-room.js';
+import { waitlistRoutes } from './routes/waitlist.js';
 import { errorHandler } from './plugins/error-handler.js';
 import { requestId } from './plugins/request-id.js';
 import { rateLimit } from './plugins/rate-limit.js';
@@ -116,6 +117,7 @@ export async function buildApp({ env }: AppOptions) {
   await app.register(async (router) => trainDataRoutes(router, trainDataService), { prefix: '/v1' });
   await app.register(wsRoutes, { prefix: '/v1' });
   await app.register(waitingRoomRoutes, { prefix: '/v1' });
+  await app.register(waitlistRoutes, { prefix: '/v1/bookings' });
 
   return app;
 }
