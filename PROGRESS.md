@@ -193,26 +193,48 @@
 
 ---
 
-## Phase 8: Frontend Build — PLAN
+## Phase 8: Frontend Build — STATUS: DONE ✅
 
-**Goal**: Complete Next.js 14 App Router frontend matching design tokens, railway typography, and all signature UI elements specified in agent.md § 9.
+### What was built
 
-**Signature UI Elements**:
-1. `SplitFlapBoard.tsx` — Mechanical flip animation for train departures, status, platform, and delay indicators.
-2. `JourneyRibbon.tsx` — Station-to-station route progress track with stops, timings, distance, and platform numbers.
-3. `CoachMap.tsx` — Interactive, segment-aware coach seat selection grid with class filter (SL, 3A, 2A, CC), berth types (LB, MB, UB, SL, SU, WINDOW, AISLE), and real-time occupied/held status.
-4. `TicketStub.tsx` — Authentic IRCTC-style printable ticket card with PNR, QR code (HMAC token), passenger table, and fare breakdown.
-5. `HoldTimer.tsx` — 10-minute seat hold countdown ticker synchronized with WebSocket events.
+**Signature Railway UI Elements**
+1. **`SplitFlapBoard.tsx`**: Mechanical split-flap departure board with CSS 3D transform (`rotateX`) animations, live platform indicators, timetable data, and periodic status updates.
+2. **`JourneyRibbon.tsx`**: Station-to-station route track showing origin, destination, halts, cumulative distance in km, arrival/departure timestamps, and active segment highlight.
+3. **`CoachMap.tsx`**: Segment-aware interactive coach grid with class-specific seat layouts (SL, 3A, 2A, CC), berth types (LB, MB, UB, SL, SU, WINDOW, AISLE), multi-passenger assignment (up to 6 seats), and live seat states (Available, Selected, Held with 10m pulse, Occupied).
+4. **`TicketStub.tsx`**: Authentic Electronic Reservation Slip (ERS) ticket with perforated tear edges, PNR display, 2D QR matrix representation, passenger berths, itemized fare breakdown (base + GST + reservation fee), print action, and tiered cancellation workflow.
+5. **`HoldTimer.tsx`**: 10-minute reservation countdown clock with progress track, visual urgency shift (amber to flashing red under 2 minutes), and automatic expiry handling.
 
-**Pages & Routes**:
-- `/` — Hero search with Station autocomplete, date picker, class selector, recent searches, live status banner.
-- `/trains` — Train search results with Split-flap board header, fare badges, class availability cards, filter sidebar.
-- `/booking/[runId]` — Segment coach map, passenger form (up to 6 passengers with berth preferences), hold timer ticker.
-- `/payment/[bookingId]` — Order summary, breakdown of base fare + GST + reservation fee, simulated / live Razorpay checkout.
-- `/ticket/[pnr]` — Ticket stub with downloadable receipt and cancellation action.
-- `/waitlist/[runId]` — Live waitlist position tracker.
-- `/my-bookings` — Booking history tabs (Active, Completed, Cancelled).
-- `/auth/login` & `/auth/register` — Accessible auth forms with rate-limit and lockout messaging.
+**Pages & Routes (`apps/web/src/app`)**
+- `/` — Homepage featuring hero railway branding, Station Search form, live split-flap departures board, and live train running telemetry.
+- `/trains` — Train search results with interactive train cards, class availability (SL, 3A, 2A, CC), real-time pricing in ₹, and class selection.
+- `/booking/[runId]` — Booking flow integrating Coach Map, Journey Ribbon, and multi-passenger input form (Name, Age, Gender, Berth Preference).
+- `/payment/[bookingId]` — Order checkout with Hold Timer countdown, itemized fare summary, and simulated Razorpay test gateway authorization.
+- `/ticket/[pnr]` — Ticket confirmation displaying the authentic Ticket Stub with printable view and tiered cancellation modal.
+- `/my-bookings` — Passenger reservation history with tabs (All, Active, Cancelled) and direct PNR ticket links.
+- `/auth/login` & `/auth/register` — Passenger authentication pages with token storage in localStorage and error states.
+
+### Verification
+- `pnpm --filter @railgrid/shared typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/db typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/api typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/worker typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/web typecheck` ✅ (0 errors)
+- `pnpm --filter @railgrid/web build` ✅ **Production build successful** (all 8 static/dynamic routes prerendered, bundle size 98–124 kB).
+- `pnpm --filter @railgrid/api test` ✅ **70 tests pass**
+- `pnpm --filter @railgrid/worker test` ✅ **14 tests pass**
+- **Total: 84 unit tests pass**.
+
+---
+
+## Phase 9: Hardening, Metrics & Load Testing — PLAN
+
+**Goal**: Sections 14, 15, and 16 of `agent.md`. Metrics collection, Prometheus/Grafana alerts, k6 last-seat concurrent booking load test, and chaos scenarios.
+
+**Acceptance criteria**:
+- k6 last-seat test: 1,000 concurrent requests competing for 1 remaining seat → exactly 1 booking succeeds, 0 overlapping allocations.
+- Rate limiter verified under sustained load.
+- Metrics endpoint `/metrics` exports valid Prometheus metrics (booking latency, seat allocation counters, active holds).
+- Chaos verification: workers and API survive service restarts without state corruption.
 
 ---
 

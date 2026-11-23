@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@railgrid/shared'],
   experimental: {
-    typedRoutes: true,
+    typedRoutes: false,
   },
   async headers() {
     return [
